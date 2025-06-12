@@ -38,17 +38,8 @@ export default function App() {
   }, []);
 
   const playSound = async (type) => {
-    try {
-      if (type === 'hit') {
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEbBzWC0fPTgjAFJIPS8NqHOAcTYrjnr5pMEgxKouPurmIcCDqH0vPUsyUGLI7U8dqHOAg3gNTz07koA'" },
-          { shouldPlay: true }
-        );
-        await sound.unloadAsync();
-      }
-    } catch (error) {
-      // 音声エラーは無視
-    }
+    // 音声は一旦無効化（ファイルが必要なため）
+    return;
   };
 
   const initializeBlocks = () => {
