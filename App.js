@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, Dimensions } from 'react-nati
 import { useState, useEffect, useRef } from 'react';
 import Animated, { useSharedValue, useAnimatedStyle, runOnJS } from 'react-native-reanimated';
 import { PanGestureHandler, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Audio } from 'expo-av';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const PADDLE_WIDTH = 80;
@@ -17,6 +18,7 @@ export default function App() {
   const [score, setScore] = useState(0);
   const [gameStarted, setGameStarted] = useState(false);
   const [gameOver, setGameOver] = useState(false);
+  const [gameWon, setGameWon] = useState(false);
   const [blocks, setBlocks] = useState([]);
   
   const ballX = useSharedValue(screenWidth / 2);
@@ -26,6 +28,28 @@ export default function App() {
   const paddleX = useSharedValue(screenWidth / 2 - PADDLE_WIDTH / 2);
   
   const gameLoopRef = useRef();
+  const soundRef = useRef({});
+
+  // 音声の初期化
+  useEffect(() => {
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+    });
+  }, []);
+
+  const playSound = async (type) => {
+    try {
+      if (type === 'hit') {
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEbBzWC0fPTgjAFJIPS8NqHOAcTYrjnr5pMEgxKouPurmIcCDqH0vPUsyUGLI7U8dqHOAg3gNTz07koA'" },
+          { shouldPlay: true }
+        );
+        await sound.unloadAsync();
+      }
+    } catch (error) {
+      // 音声エラーは無視
+    }
+  };
 
   const initializeBlocks = () => {
     const newBlocks = [];
@@ -46,6 +70,7 @@ export default function App() {
   const startGame = () => {
     setGameStarted(true);
     setGameOver(false);
+    setGameWon(false);
     setScore(0);
     ballX.value = screenWidth / 2 - BALL_SIZE / 2;
     ballY.value = screenHeight - 250;
@@ -53,7 +78,11 @@ export default function App() {
     ballVelocityY.value = -4;
     paddleX.value = screenWidth / 2 - PADDLE_WIDTH / 2;
     initializeBlocks();
-    startGameLoop();
+    
+    // 少し遅延してからゲームループを開始
+    setTimeout(() => {
+      startGameLoop();
+    }, 100);
   };
 
   const blocksRef = useRef(blocks);
@@ -117,6 +146,8 @@ export default function App() {
       
       // ブロックとの当たり判定
       const currentBlocks = blocksRef.current;
+      let hitBlock = false;
+      
       for (let i = 0; i < currentBlocks.length; i++) {
         const block = currentBlocks[i];
         if (!block.destroyed) {
@@ -125,12 +156,18 @@ export default function App() {
               ballY.value < block.y + BLOCK_HEIGHT && 
               ballY.value + BALL_SIZE > block.y) {
             
+            hitBlock = true;
+            
             // ブロックを破壊
             runOnJS(() => {
-              setBlocks(prev => prev.map((b, index) => 
-                index === i ? { ...b, destroyed: true } : b
-              ));
+              setBlocks(prev => {
+                const newBlocks = prev.map((b, index) => 
+                  index === i ? { ...b, destroyed: true } : b
+                );
+                return newBlocks;
+              });
               setScore(prev => prev + 10);
+              playSound('hit');
             })();
             
             ballVelocityY.value = -ballVelocityY.value;
@@ -178,10 +215,16 @@ export default function App() {
 
   // ゲーム完了チェック
   useEffect(() => {
-    const remainingBlocks = blocks.filter(block => !block.destroyed);
-    if (remainingBlocks.length === 0 && blocks.length > 0 && gameStarted) {
-      setGameOver(true);
-      setGameStarted(false);
+    if (blocks.length > 0 && gameStarted) {
+      const remainingBlocks = blocks.filter(block => !block.destroyed);
+      if (remainingBlocks.length === 0) {
+        setGameWon(true);
+        setGameStarted(false);
+        if (gameLoopRef.current) {
+          cancelAnimationFrame(gameLoopRef.current);
+          gameLoopRef.current = null;
+        }
+      }
     }
   }, [blocks, gameStarted]);
 
@@ -190,7 +233,7 @@ export default function App() {
       <Text style={styles.title}>ブロック崩し</Text>
       <Text style={styles.score}>スコア: {score}</Text>
       
-      {!gameStarted && !gameOver && (
+      {!gameStarted && !gameOver && !gameWon && (
         <TouchableOpacity style={styles.startButton} onPress={startGame}>
           <Text style={styles.buttonText}>ゲーム開始</Text>
         </TouchableOpacity>
@@ -199,6 +242,16 @@ export default function App() {
       {gameOver && (
         <View style={styles.gameOverContainer}>
           <Text style={styles.gameOverText}>ゲームオーバー</Text>
+          <TouchableOpacity style={styles.startButton} onPress={startGame}>
+            <Text style={styles.buttonText}>もう一度</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      
+      {gameWon && (
+        <View style={styles.gameOverContainer}>
+          <Text style={styles.gameWonText}>ゲームクリア！</Text>
+          <Text style={styles.finalScore}>最終スコア: {score}</Text>
           <TouchableOpacity style={styles.startButton} onPress={startGame}>
             <Text style={styles.buttonText}>もう一度</Text>
           </TouchableOpacity>
@@ -279,6 +332,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#ff6b6b',
     fontWeight: 'bold',
+    marginBottom: 20,
+  },
+  gameWonText: {
+    fontSize: 28,
+    color: '#4ecdc4',
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  finalScore: {
+    fontSize: 18,
+    color: '#fff',
     marginBottom: 20,
   },
   gameArea: {
