@@ -47,57 +47,44 @@ export default function App() {
     setGameStarted(true);
     setGameOver(false);
     setScore(0);
-    ballX.value = screenWidth / 2;
-    ballY.value = screenHeight - 200;
-    ballVelocityX.value = 3;
-    ballVelocityY.value = -3;
+    ballX.value = screenWidth / 2 - BALL_SIZE / 2;
+    ballY.value = screenHeight - 250;
+    ballVelocityX.value = 2;
+    ballVelocityY.value = -4;
     paddleX.value = screenWidth / 2 - PADDLE_WIDTH / 2;
     initializeBlocks();
     startGameLoop();
   };
 
-  const checkBlockCollision = () => {
-    setBlocks(currentBlocks => {
-      let newBlocks = [...currentBlocks];
-      let hitBlock = false;
-      
-      for (let i = 0; i < newBlocks.length; i++) {
-        const block = newBlocks[i];
-        if (!block.destroyed) {
-          if (ballX.value + BALL_SIZE >= block.x && 
-              ballX.value <= block.x + BLOCK_WIDTH &&
-              ballY.value + BALL_SIZE >= block.y && 
-              ballY.value <= block.y + BLOCK_HEIGHT) {
-            newBlocks[i] = { ...block, destroyed: true };
-            hitBlock = true;
-            setScore(prev => prev + 10);
-            break;
-          }
-        }
-      }
-      
-      if (hitBlock) {
-        ballVelocityY.value = -ballVelocityY.value;
-      }
-      
-      return newBlocks;
-    });
-  };
+  const blocksRef = useRef(blocks);
+  
+  useEffect(() => {
+    blocksRef.current = blocks;
+  }, [blocks]);
 
   const startGameLoop = () => {
     const gameLoop = () => {
+      // ボールの位置を更新
       ballX.value += ballVelocityX.value;
       ballY.value += ballVelocityY.value;
       
-      // 壁との当たり判定
-      if (ballX.value <= 0 || ballX.value >= screenWidth - BALL_SIZE) {
-        ballVelocityX.value = -ballVelocityX.value;
+      // 左右の壁との当たり判定
+      if (ballX.value <= 0) {
+        ballX.value = 0;
+        ballVelocityX.value = Math.abs(ballVelocityX.value);
       }
-      if (ballY.value <= 0) {
-        ballVelocityY.value = -ballVelocityY.value;
+      if (ballX.value >= screenWidth - BALL_SIZE) {
+        ballX.value = screenWidth - BALL_SIZE;
+        ballVelocityX.value = -Math.abs(ballVelocityX.value);
       }
       
-      // ゲームオーバー判定
+      // 上の壁との当たり判定
+      if (ballY.value <= 0) {
+        ballY.value = 0;
+        ballVelocityY.value = Math.abs(ballVelocityY.value);
+      }
+      
+      // ゲームオーバー判定（下に落ちた時）
       if (ballY.value >= screenHeight - 50) {
         runOnJS(setGameOver)(true);
         runOnJS(setGameStarted)(false);
@@ -107,16 +94,46 @@ export default function App() {
       // パドルとの当たり判定
       const paddleY = screenHeight - 100;
       if (ballY.value + BALL_SIZE >= paddleY && 
-          ballY.value <= paddleY + PADDLE_HEIGHT &&
+          ballY.value + BALL_SIZE <= paddleY + PADDLE_HEIGHT + 5 &&
           ballX.value + BALL_SIZE >= paddleX.value && 
           ballX.value <= paddleX.value + PADDLE_WIDTH) {
+        ballY.value = paddleY - BALL_SIZE;
         ballVelocityY.value = -Math.abs(ballVelocityY.value);
+        
+        // パドルの位置によってボールの横方向の速度を調整
+        const paddleCenter = paddleX.value + PADDLE_WIDTH / 2;
+        const ballCenter = ballX.value + BALL_SIZE / 2;
+        const distance = ballCenter - paddleCenter;
+        ballVelocityX.value = distance * 0.1;
       }
       
       // ブロックとの当たり判定
-      runOnJS(checkBlockCollision)();
+      const currentBlocks = blocksRef.current;
+      for (let i = 0; i < currentBlocks.length; i++) {
+        const block = currentBlocks[i];
+        if (!block.destroyed) {
+          if (ballX.value + BALL_SIZE >= block.x && 
+              ballX.value <= block.x + BLOCK_WIDTH &&
+              ballY.value + BALL_SIZE >= block.y && 
+              ballY.value <= block.y + BLOCK_HEIGHT) {
+            
+            // ブロックを破壊
+            runOnJS(() => {
+              setBlocks(prev => prev.map((b, index) => 
+                index === i ? { ...b, destroyed: true } : b
+              ));
+              setScore(prev => prev + 10);
+            })();
+            
+            ballVelocityY.value = -ballVelocityY.value;
+            break;
+          }
+        }
+      }
       
-      gameLoopRef.current = requestAnimationFrame(gameLoop);
+      if (gameLoopRef.current) {
+        gameLoopRef.current = requestAnimationFrame(gameLoop);
+      }
     };
     
     gameLoopRef.current = requestAnimationFrame(gameLoop);
@@ -126,9 +143,18 @@ export default function App() {
     return () => {
       if (gameLoopRef.current) {
         cancelAnimationFrame(gameLoopRef.current);
+        gameLoopRef.current = null;
       }
     };
   }, []);
+
+  // ゲーム停止時にアニメーションを停止
+  useEffect(() => {
+    if (!gameStarted && gameLoopRef.current) {
+      cancelAnimationFrame(gameLoopRef.current);
+      gameLoopRef.current = null;
+    }
+  }, [gameStarted]);
 
   const onPanGesture = (event) => {
     paddleX.value = Math.max(0, Math.min(screenWidth - PADDLE_WIDTH, event.nativeEvent.absoluteX - PADDLE_WIDTH / 2));
