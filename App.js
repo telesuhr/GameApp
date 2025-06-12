@@ -68,18 +68,20 @@ export default function App() {
       ballX.value += ballVelocityX.value;
       ballY.value += ballVelocityY.value;
       
-      // 左右の壁との当たり判定
-      if (ballX.value <= 0) {
+      // 左の壁
+      if (ballX.value < 0) {
         ballX.value = 0;
         ballVelocityX.value = Math.abs(ballVelocityX.value);
       }
-      if (ballX.value >= screenWidth - BALL_SIZE) {
+      
+      // 右の壁
+      if (ballX.value > screenWidth - BALL_SIZE) {
         ballX.value = screenWidth - BALL_SIZE;
         ballVelocityX.value = -Math.abs(ballVelocityX.value);
       }
       
-      // 上の壁との当たり判定
-      if (ballY.value <= 0) {
+      // 上の壁
+      if (ballY.value < 0) {
         ballY.value = 0;
         ballVelocityY.value = Math.abs(ballVelocityY.value);
       }
@@ -94,17 +96,23 @@ export default function App() {
       // パドルとの当たり判定
       const paddleY = screenHeight - 100;
       if (ballY.value + BALL_SIZE >= paddleY && 
-          ballY.value + BALL_SIZE <= paddleY + PADDLE_HEIGHT + 5 &&
+          ballY.value <= paddleY + PADDLE_HEIGHT &&
           ballX.value + BALL_SIZE >= paddleX.value && 
-          ballX.value <= paddleX.value + PADDLE_WIDTH) {
+          ballX.value <= paddleX.value + PADDLE_WIDTH &&
+          ballVelocityY.value > 0) {
         ballY.value = paddleY - BALL_SIZE;
         ballVelocityY.value = -Math.abs(ballVelocityY.value);
         
-        // パドルの位置によってボールの横方向の速度を調整
+        // パドルの位置によってボールの角度を調整
         const paddleCenter = paddleX.value + PADDLE_WIDTH / 2;
         const ballCenter = ballX.value + BALL_SIZE / 2;
         const distance = ballCenter - paddleCenter;
-        ballVelocityX.value = distance * 0.1;
+        ballVelocityX.value += distance * 0.08;
+        
+        // 速度を制限
+        if (Math.abs(ballVelocityX.value) > 6) {
+          ballVelocityX.value = ballVelocityX.value > 0 ? 6 : -6;
+        }
       }
       
       // ブロックとの当たり判定
@@ -112,10 +120,10 @@ export default function App() {
       for (let i = 0; i < currentBlocks.length; i++) {
         const block = currentBlocks[i];
         if (!block.destroyed) {
-          if (ballX.value + BALL_SIZE >= block.x && 
-              ballX.value <= block.x + BLOCK_WIDTH &&
-              ballY.value + BALL_SIZE >= block.y && 
-              ballY.value <= block.y + BLOCK_HEIGHT) {
+          if (ballX.value < block.x + BLOCK_WIDTH && 
+              ballX.value + BALL_SIZE > block.x &&
+              ballY.value < block.y + BLOCK_HEIGHT && 
+              ballY.value + BALL_SIZE > block.y) {
             
             // ブロックを破壊
             runOnJS(() => {
